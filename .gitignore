@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.DS_Store
+*.stl
+*_legend.txt
+data/gallery.json
+data/side_by_side.png
+data/test_*

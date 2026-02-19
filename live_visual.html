@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DewPoint Lens</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { overflow: hidden; background: #060610; font-family: 'Courier New', monospace; color: #e0e0e0; }
+  canvas { display: block; }
+
+  #overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none; z-index: 10;
+  }
+
+  #readings {
+    position: absolute; top: 20px; left: 20px;
+    background: rgba(0,0,0,0.55); border: 1px solid rgba(100,200,255,0.2);
+    padding: 14px 18px; border-radius: 8px; font-size: 13px; line-height: 1.9;
+    backdrop-filter: blur(8px);
+  }
+  #readings .label { color: #6af; }
+  #readings .value { color: #fff; font-weight: bold; }
+  #readings .unit { color: #666; font-size: 11px; }
+
+  #timestamp-display {
+    position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+    font-size: 28px; font-weight: bold; color: rgba(255,255,255,0.7);
+    letter-spacing: 4px;
+    text-shadow: 0 0 20px rgba(100,170,255,0.3);
+  }
+
+  #run-toggle {
+    position: absolute; top: 20px; right: 20px;
+    pointer-events: all; display: flex; gap: 8px;
+  }
+  #run-toggle button {
+    background: rgba(100,200,255,0.12); border: 1px solid rgba(100,200,255,0.3);
+    color: #6af; padding: 8px 16px; border-radius: 6px; cursor: pointer;
+    font-family: inherit; font-size: 12px; transition: all 0.3s;
+  }
+  #run-toggle button:hover { background: rgba(100,200,255,0.25); }
+  #run-toggle button.active { background: rgba(100,200,255,0.35); color: #fff; border-color: #6af; }
+
+  #speed-control {
+    position: absolute; top: 70px; right: 20px;
+    pointer-events: all; display: flex; align-items: center; gap: 8px;
+  }
+  #btn-pause {
+    background: rgba(100,200,255,0.12); border: 1px solid rgba(100,200,255,0.3);
+    color: #fff; width: 30px; height: 28px; border-radius: 4px; cursor: pointer;
+    font-family: inherit; font-size: 12px; letter-spacing: -2px;
+  }
+  #btn-pause:hover { background: rgba(100,200,255,0.25); }
+  #speed-control label { font-size: 11px; color: #6af; }
+  #speed-control select {
+    background: rgba(100,200,255,0.12); border: 1px solid rgba(100,200,255,0.3);
+    color: #fff; padding: 5px 8px; border-radius: 4px; cursor: pointer;
+    font-family: inherit; font-size: 11px;
+  }
+  #speed-control select option { background: #111; color: #fff; }
+
+  #timeline-container {
+    position: absolute; bottom: 20px; left: 40px; right: 40px; height: 36px;
+    pointer-events: all; cursor: pointer;
+  }
+  #timeline-bg {
+    position: absolute; bottom: 10px; left: 0; right: 0; height: 6px;
+    background: rgba(255,255,255,0.08); border-radius: 3px;
+  }
+  #timeline-fill {
+    position: absolute; bottom: 10px; left: 0; height: 6px;
+    background: linear-gradient(90deg, #8855cc, #6af); border-radius: 3px;
+    transition: width 0.15s;
+  }
+  #timeline-handle {
+    position: absolute; bottom: 5px; width: 14px; height: 14px;
+    background: #fff; border-radius: 50%; transform: translateX(-50%);
+    box-shadow: 0 0 8px rgba(136,85,204,0.6);
+    transition: left 0.15s;
+  }
+  #timeline-label {
+    position: absolute; bottom: 22px; right: 0; font-size: 10px; color: #666;
+  }
+
+  #target-controls {
+    position: absolute; top: 200px; left: 20px;
+    background: rgba(0,0,0,0.55); border: 1px solid rgba(100,200,255,0.2);
+    padding: 10px 14px; border-radius: 8px; backdrop-filter: blur(8px);
+    pointer-events: all; font-size: 13px;
+  }
+  #target-controls input {
+    width: 50px; background: rgba(255,255,255,0.1); border: 1px solid rgba(100,200,255,0.3);
+    color: #fff; padding: 4px 6px; border-radius: 4px; font-family: inherit; font-size: 13px;
+    text-align: center;
+  }
+
+  #risk-bar-container {
+    position: absolute; top: 20px; left: 250px;
+    width: 160px; text-align: center;
+  }
+  #risk-bar-label { font-size: 10px; color: #666; margin-bottom: 4px; }
+  #risk-bar-bg {
+    height: 5px; background: rgba(255,255,255,0.06); border-radius: 3px; overflow: hidden;
+  }
+  #risk-bar-fill {
+    height: 100%; width: 0%; border-radius: 3px; transition: width 0.4s, background 0.4s;
+  }
+
+  #legend {
+    position: absolute; bottom: 50px; left: 40px;
+    font-size: 11px; color: #555; line-height: 1.6;
+  }
+
+  #history {
+    position: absolute; top: 310px; left: 20px; width: 210px;
+    background: rgba(0,0,0,0.55); border: 1px solid rgba(100,200,255,0.15);
+    padding: 10px 14px; border-radius: 8px; backdrop-filter: blur(8px);
+    font-size: 10px; line-height: 1.6; color: #888;
+  }
+  #history .hist-title { color: #6af; font-size: 11px; margin-bottom: 4px; }
+  #history .hist-row { display: flex; justify-content: space-between; }
+  #history .hist-row.latest { color: #fff; }
+</style>
+</head>
+<body>
+
+<div id="overlay">
+  <div id="readings">
+    <div><span class="label">TEMP </span><span class="value" id="v-temp">--</span><span class="unit"> °C</span></div>
+    <div><span class="label">RH   </span><span class="value" id="v-rh">--</span><span class="unit"> %</span></div>
+    <div><span class="label">DEW  </span><span class="value" id="v-dew">--</span><span class="unit"> °C</span></div>
+    <div><span class="label">MARGIN </span><span class="value" id="v-margin">--</span><span class="unit"> °C</span></div>
+    <div><span class="label">RISK </span><span class="value" id="v-risk">--</span></div>
+  </div>
+
+  <div id="timestamp-display">--:--:--</div>
+
+  <div id="target-controls">
+    <div>
+      <label class="label">TARGET TEMP </label>
+      <input type="number" id="base-temp" value="22" min="-10" max="100" step="0.5">
+      <span class="unit">°C</span>
+    </div>
+    <div style="margin-top:8px">
+      <label class="label">TARGET RH </label>
+      <input type="number" id="base-rh" value="22" min="0" max="100" step="1">
+      <span class="unit">%</span>
+    </div>
+  </div>
+
+  <div id="run-toggle">
+    <button id="btn-run1" class="active" onclick="switchRun(0)">Run 1</button>
+    <button id="btn-run2" onclick="switchRun(1)">Run 2</button>
+  </div>
+
+  <div id="speed-control">
+    <button id="btn-pause" onclick="togglePause()">II</button>
+    <label>SPEED</label>
+    <select id="speed-select" onchange="setSpeed(parseInt(this.value))">
+      <option value="2000">0.25x</option>
+      <option value="1000">0.5x</option>
+      <option value="500" selected>1x</option>
+      <option value="250">2x</option>
+      <option value="100">5x</option>
+      <option value="50">10x</option>
+      <option value="20">25x</option>
+      <option value="10">50x</option>
+      <option value="5">100x</option>
+    </select>
+  </div>
+
+  <div id="risk-bar-container">
+    <div id="risk-bar-label">RISK SCORE</div>
+    <div id="risk-bar-bg"><div id="risk-bar-fill"></div></div>
+  </div>
+
+  <div id="timeline-container" onmousedown="scrubStart(event)" ontouchstart="scrubStart(event)">
+    <div id="timeline-bg"></div>
+    <div id="timeline-fill"></div>
+    <div id="timeline-handle"></div>
+    <div id="timeline-label"></div>
+  </div>
+
+  <div id="history">
+    <div class="hist-title">RECENT READINGS</div>
+    <div id="hist-rows"></div>
+  </div>
+
+  <div id="legend">
+    purple = ideal · blue = too cold/dry · orange = too hot/humid · particle speed = temp deviation · blob shape = humidity deviation
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// captured data
+const RUN1 = [
+  {ts:"13:52:32",temp:21.7,rh:24.0,dew:0.24,margin:21.46,tv:0.0,rv:0.0,exc:0,risk:0.047},
+  {ts:"13:52:42",temp:21.7,rh:24.0,dew:0.24,margin:21.46,tv:0.0,rv:0.0,exc:0,risk:0.047},
+  {ts:"13:52:52",temp:21.7,rh:24.0,dew:0.24,margin:21.46,tv:0.0,rv:0.0,exc:0,risk:0.047},
+  {ts:"13:53:02",temp:21.7,rh:24.0,dew:0.24,margin:21.46,tv:0.0,rv:0.0,exc:0,risk:0.047},
+  {ts:"13:53:13",temp:21.7,rh:24.0,dew:0.24,margin:21.46,tv:0.0,rv:0.0,exc:0,risk:0.047},
+  {ts:"13:53:23",temp:21.7,rh:24.0,dew:0.24,margin:21.46,tv:0.0,rv:0.0,exc:0,risk:0.047},
+  {ts:"13:53:33",temp:21.7,rh:23.0,dew:-0.34,margin:22.04,tv:0.0,rv:0.41,exc:0,risk:0.045},
+  {ts:"13:53:43",temp:21.7,rh:23.0,dew:-0.34,margin:22.04,tv:0.0,rv:0.52,exc:0,risk:0.045},
+  {ts:"13:53:54",temp:21.7,rh:23.0,dew:-0.34,margin:22.04,tv:0.0,rv:0.55,exc:0,risk:0.045},
+  {ts:"13:54:04",temp:21.7,rh:23.0,dew:-0.34,margin:22.04,tv:0.0,rv:0.52,exc:0,risk:0.045},
+  {ts:"13:54:14",temp:21.7,rh:23.0,dew:-0.34,margin:22.04,tv:0.0,rv:0.41,exc:0,risk:0.045},
+  {ts:"13:54:25",temp:21.7,rh:23.0,dew:-0.34,margin:22.04,tv:0.0,rv:0.0,exc:0,risk:0.045},
+  {ts:"13:54:35",temp:21.7,rh:23.0,dew:-0.34,margin:22.04,tv:0.0,rv:0.0,exc:0,risk:0.045},
+  {ts:"13:54:45",temp:21.7,rh:23.0,dew:-0.34,margin:22.04,tv:0.0,rv:0.0,exc:0,risk:0.045},
+  {ts:"13:54:55",temp:21.7,rh:23.0,dew:-0.34,margin:22.04,tv:0.0,rv:0.0,exc:0,risk:0.045},
+  {ts:"13:55:06",temp:21.7,rh:23.0,dew:-0.34,margin:22.04,tv:0.0,rv:0.0,exc:0,risk:0.045},
+  {ts:"13:55:16",temp:21.7,rh:23.0,dew:-0.34,margin:22.04,tv:0.0,rv:0.0,exc:0,risk:0.045},
+  {ts:"13:55:26",temp:21.7,rh:23.0,dew:-0.34,margin:22.04,tv:0.0,rv:0.0,exc:0,risk:0.045},
+  {ts:"13:55:36",temp:21.7,rh:23.0,dew:-0.34,margin:22.04,tv:0.0,rv:0.0,exc:0,risk:0.045},
+  {ts:"13:55:47",temp:21.7,rh:23.0,dew:-0.34,margin:22.04,tv:0.0,rv:0.0,exc:0,risk:0.045},
+  {ts:"13:55:57",temp:21.7,rh:23.0,dew:-0.34,margin:22.04,tv:0.0,rv:0.0,exc:0,risk:0.045},
+  {ts:"13:56:07",temp:21.7,rh:23.0,dew:-0.34,margin:22.04,tv:0.0,rv:0.0,exc:0,risk:0.045},
+  {ts:"13:56:18",temp:21.7,rh:24.0,dew:0.24,margin:21.46,tv:0.0,rv:0.41,exc:0,risk:0.047},
+  {ts:"13:56:28",temp:21.7,rh:24.0,dew:0.24,margin:21.46,tv:0.0,rv:0.52,exc:0,risk:0.047},
+  {ts:"13:56:38",temp:21.7,rh:24.0,dew:0.24,margin:21.46,tv:0.0,rv:0.55,exc:0,risk:0.047},
+  {ts:"13:56:48",temp:21.7,rh:24.0,dew:0.24,margin:21.46,tv:0.0,rv:0.52,exc:0,risk:0.047},
+  {ts:"13:56:59",temp:21.7,rh:23.0,dew:-0.34,margin:22.04,tv:0.0,rv:0.52,exc:0,risk:0.045},
+  {ts:"13:57:09",temp:21.7,rh:23.0,dew:-0.34,margin:22.04,tv:0.0,rv:0.52,exc:0,risk:0.045},
+  {ts:"13:57:19",temp:21.7,rh:23.0,dew:-0.34,margin:22.04,tv:0.0,rv:0.55,exc:0,risk:0.045},
+  {ts:"13:57:29",temp:21.7,rh:23.0,dew:-0.34,margin:22.04,tv:0.0,rv:0.52,exc:0,risk:0.045},
+  {ts:"13:57:40",temp:21.7,rh:23.0,dew:-0.34,margin:22.04,tv:0.0,rv:0.41,exc:0,risk:0.045},
+  {ts:"13:57:50",temp:21.7,rh:23.0,dew:-0.34,margin:22.04,tv:0.0,rv:0.0,exc:0,risk:0.045},
+  {ts:"13:58:00",temp:21.7,rh:23.0,dew:-0.34,margin:22.04,tv:0.0,rv:0.0,exc:0,risk:0.045},
+  {ts:"13:58:11",temp:21.7,rh:24.0,dew:0.24,margin:21.46,tv:0.0,rv:0.41,exc:0,risk:0.047},
+  {ts:"13:58:21",temp:22.0,rh:32.0,dew:4.54,margin:17.46,tv:0.12,rv:3.61,exc:0,risk:0.057},
+  {ts:"13:58:31",temp:23.0,rh:45.0,dew:10.42,margin:12.58,tv:0.52,rv:8.89,exc:0,risk:0.079},
+  {ts:"13:58:41",temp:24.7,rh:57.0,dew:15.60,margin:9.10,tv:1.20,rv:14.11,exc:0,risk:0.110},
+  {ts:"13:58:52",temp:24.1,rh:50.0,dew:13.02,margin:11.08,tv:1.29,rv:14.21,exc:0,risk:0.090},
+  {ts:"13:59:02",temp:23.9,rh:41.0,dew:9.84,margin:14.06,tv:1.21,rv:12.01,exc:0,risk:0.071},
+  {ts:"13:59:12",temp:23.7,rh:34.0,dew:6.90,margin:16.80,tv:0.95,rv:9.54,exc:0,risk:0.060},
+  {ts:"13:59:23",temp:23.6,rh:29.0,dew:4.51,margin:19.09,tv:0.56,rv:10.29,exc:0,risk:0.052},
+  {ts:"13:59:33",temp:23.4,rh:27.0,dew:3.33,margin:20.07,tv:0.46,rv:11.96,exc:0,risk:0.050},
+  {ts:"13:59:43",temp:23.3,rh:25.0,dew:2.16,margin:21.14,tv:0.30,rv:9.58,exc:0,risk:0.047},
+  {ts:"13:59:53",temp:23.2,rh:24.0,dew:1.50,margin:21.70,tv:0.26,rv:6.45,exc:0,risk:0.046},
+  {ts:"14:00:04",temp:23.1,rh:23.0,dew:0.83,margin:22.27,tv:0.23,rv:4.05,exc:0,risk:0.045},
+  {ts:"14:00:14",temp:23.1,rh:33.0,dew:5.94,margin:17.16,tv:0.19,rv:3.71,exc:0,risk:0.058},
+  {ts:"14:00:24",temp:23.5,rh:49.0,dew:12.16,margin:11.34,tv:0.16,rv:9.89,exc:0,risk:0.088},
+  {ts:"14:00:34",temp:23.9,rh:59.0,dew:15.39,margin:8.51,tv:0.31,rv:15.10,exc:0,risk:0.118},
+  {ts:"14:00:45",temp:24.3,rh:66.0,dew:17.53,margin:6.77,tv:0.49,rv:18.33,exc:1,risk:0.148},
+  {ts:"14:00:55",temp:24.6,rh:70.0,dew:18.76,margin:5.84,tv:0.63,rv:18.74,exc:1,risk:0.171},
+  {ts:"14:01:05",temp:24.8,rh:72.0,dew:19.40,margin:5.40,tv:0.66,rv:14.91,exc:1,risk:0.185},
+  {ts:"14:01:16",temp:25.1,rh:74.0,dew:20.13,margin:4.97,tv:0.59,rv:9.47,exc:1,risk:0.201},
+  {ts:"14:01:26",temp:25.2,rh:75.0,dew:20.44,margin:4.76,tv:0.49,rv:5.99,exc:1,risk:0.210},
+  {ts:"14:01:36",temp:25.2,rh:58.0,dew:16.34,margin:8.86,tv:0.37,rv:6.34,exc:0,risk:0.113},
+  {ts:"14:01:46",temp:25.0,rh:43.0,dew:11.54,margin:13.46,tv:0.24,rv:12.55,exc:0,risk:0.074},
+  {ts:"14:01:57",temp:24.8,rh:35.0,dew:8.29,margin:16.51,tv:0.18,rv:17.21,exc:0,risk:0.061},
+  {ts:"14:02:07",temp:24.6,rh:30.0,dew:5.86,margin:18.74,tv:0.24,rv:19.50,exc:0,risk:0.053},
+  {ts:"14:02:17",temp:24.4,rh:27.0,dew:4.18,margin:20.22,tv:0.33,rv:18.55,exc:0,risk:0.049},
+  {ts:"14:02:27",temp:24.2,rh:25.0,dew:2.92,margin:21.28,tv:0.37,rv:12.42,exc:0,risk:0.047}
+];
+
+const RUN2 = [
+  {ts:"14:10:35",temp:21.9,rh:22.0,dew:-0.78,margin:22.68,tv:0.0,rv:0.0,exc:0,risk:0.044},
+  {ts:"14:10:46",temp:21.8,rh:22.0,dew:-0.87,margin:22.67,tv:0.07,rv:0.0,exc:0,risk:0.044},
+  {ts:"14:10:56",temp:21.9,rh:22.0,dew:-0.78,margin:22.68,tv:0.06,rv:0.0,exc:0,risk:0.044},
+  {ts:"14:11:06",temp:21.9,rh:22.0,dew:-0.78,margin:22.68,tv:0.05,rv:0.0,exc:0,risk:0.044},
+  {ts:"14:11:16",temp:21.9,rh:22.0,dew:-0.78,margin:22.68,tv:0.04,rv:0.0,exc:0,risk:0.044},
+  {ts:"14:11:27",temp:21.9,rh:22.0,dew:-0.78,margin:22.68,tv:0.04,rv:0.0,exc:0,risk:0.044},
+  {ts:"14:11:37",temp:21.9,rh:22.0,dew:-0.78,margin:22.68,tv:0.04,rv:0.0,exc:0,risk:0.044},
+  {ts:"14:11:47",temp:22.0,rh:22.0,dew:-0.70,margin:22.70,tv:0.04,rv:0.0,exc:0,risk:0.044},
+  {ts:"14:11:57",temp:22.0,rh:22.0,dew:-0.70,margin:22.70,tv:0.05,rv:0.0,exc:0,risk:0.044},
+  {ts:"14:12:08",temp:22.0,rh:22.0,dew:-0.70,margin:22.70,tv:0.05,rv:0.0,exc:0,risk:0.044},
+  {ts:"14:12:18",temp:22.0,rh:22.0,dew:-0.70,margin:22.70,tv:0.05,rv:0.0,exc:0,risk:0.044},
+  {ts:"14:12:28",temp:22.0,rh:22.0,dew:-0.70,margin:22.70,tv:0.04,rv:0.0,exc:0,risk:0.044},
+  {ts:"14:12:39",temp:22.0,rh:22.0,dew:-0.70,margin:22.70,tv:0.0,rv:0.0,exc:0,risk:0.044},
+  {ts:"14:14:42",temp:22.0,rh:22.0,dew:-0.70,margin:22.70,tv:0.0,rv:0.0,exc:0,risk:0.044},
+  {ts:"14:14:52",temp:22.0,rh:22.0,dew:-0.70,margin:22.70,tv:0.0,rv:0.0,exc:0,risk:0.044},
+  {ts:"14:15:02",temp:27.6,rh:70.0,dew:21.62,margin:5.98,tv:2.29,rv:19.60,exc:1,risk:0.167},
+  {ts:"14:15:13",temp:25.2,rh:77.0,dew:20.87,margin:4.33,tv:2.40,rv:26.69,exc:1,risk:0.231},
+  {ts:"14:15:23",temp:23.9,rh:80.0,dew:20.23,margin:3.67,tv:2.29,rv:29.57,exc:1,risk:0.273},
+  {ts:"14:15:33",temp:23.1,rh:83.0,dew:20.05,margin:3.05,tv:2.15,rv:28.98,exc:1,risk:0.328},
+  {ts:"14:15:43",temp:22.7,rh:77.0,dew:18.45,margin:4.25,tv:2.04,rv:23.03,exc:1,risk:0.235},
+  {ts:"14:15:54",temp:22.3,rh:69.0,dew:16.33,margin:5.97,tv:1.98,rv:5.51,exc:1,risk:0.168},
+  {ts:"14:16:04",temp:22.1,rh:64.0,dew:14.96,margin:7.14,tv:1.16,rv:7.13,exc:1,risk:0.140},
+  {ts:"14:16:14",temp:22.0,rh:59.0,dew:13.61,margin:8.39,tv:0.72,rv:9.51,exc:0,risk:0.119},
+  {ts:"14:16:25",temp:21.9,rh:54.0,dew:12.16,margin:9.74,tv:0.46,rv:10.95,exc:0,risk:0.103},
+  {ts:"14:16:35",temp:22.3,rh:53.0,dew:12.25,margin:10.05,tv:0.29,rv:9.27,exc:0,risk:0.099},
+  {ts:"14:16:45",temp:23.2,rh:56.0,dew:13.93,margin:9.27,tv:0.47,rv:6.24,exc:0,risk:0.108},
+  {ts:"14:16:55",temp:23.1,rh:46.0,dew:10.84,margin:12.26,tv:0.57,rv:6.06,exc:0,risk:0.082},
+  {ts:"14:17:06",temp:23.0,rh:38.0,dew:7.91,margin:15.09,tv:0.58,rv:7.69,exc:0,risk:0.066},
+  {ts:"14:17:16",temp:22.9,rh:33.0,dew:5.76,margin:17.14,tv:0.52,rv:9.42,exc:0,risk:0.058},
+  {ts:"14:17:26",temp:22.8,rh:30.0,dew:4.31,margin:18.49,tv:0.32,rv:10.69,exc:0,risk:0.054},
+  {ts:"14:17:37",temp:22.7,rh:27.0,dew:2.73,margin:19.97,tv:0.19,rv:10.93,exc:0,risk:0.050},
+  {ts:"14:19:40",temp:22.1,rh:23.0,dew:-0.01,margin:22.11,tv:0.36,rv:8.23,exc:0,risk:0.045},
+  {ts:"14:19:50",temp:22.1,rh:22.0,dew:-0.62,margin:22.72,tv:0.40,rv:6.11,exc:0,risk:0.044},
+  {ts:"14:20:00",temp:22.1,rh:22.0,dew:-0.62,margin:22.72,tv:0.39,rv:4.62,exc:0,risk:0.044},
+  {ts:"14:20:11",temp:22.1,rh:22.0,dew:-0.62,margin:22.72,tv:0.34,rv:3.39,exc:0,risk:0.044},
+  {ts:"14:20:21",temp:22.0,rh:22.0,dew:-0.70,margin:22.70,tv:0.26,rv:2.00,exc:0,risk:0.044}
+];
+
+const DATASETS = [RUN1, RUN2];
+
+// state
+let currentRun = 0;
+let currentIndex = 0;
+let playInterval = null;
+let playSpeed = 500;
+let sm = { temp: 22, rh: 22, margin: 22, risk: 0.044, tv: 0, rv: 0, exc: 0 };
+
+// scene
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x060610);
+const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 1000);
+camera.position.set(0, 0, 7);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+document.body.insertBefore(renderer.domElement, document.getElementById('overlay'));
+
+// blob
+const blobGeo = new THREE.IcosahedronGeometry(1.5, 5);
+const blobMat = new THREE.MeshStandardMaterial({
+  color: 0x6644cc,
+  emissive: 0x1a0a33,
+  emissiveIntensity: 0.3,
+  roughness: 0.25,
+  metalness: 0.6,
+  transparent: false,
+});
+const blob = new THREE.Mesh(blobGeo, blobMat);
+scene.add(blob);
+
+const vertexCount = blobGeo.attributes.position.array.length / 3;
+
+// not real perlin noise but close enough, just stacked sines
+function noise3d(x, y, z) {
+  let v = Math.sin(x * 1.7 + y * 2.3 + z * 3.1) * 0.5
+        + Math.sin(x * 3.4 - y * 1.2 + z * 0.8) * 0.25
+        + Math.sin(x * 0.6 + y * 4.1 - z * 2.7) * 0.15
+        + Math.sin(x * 5.2 - y * 3.5 + z * 1.4) * 0.1;
+  return v;
+}
+
+// squish the base shape around so its not just a boring sphere
+const origPositions = new Float32Array(blobGeo.attributes.position.array.length);
+const rawPos = blobGeo.attributes.position.array;
+for (let i = 0; i < vertexCount; i++) {
+  const i3 = i * 3;
+  const x = rawPos[i3], y = rawPos[i3 + 1], z = rawPos[i3 + 2];
+  const len = Math.sqrt(x * x + y * y + z * z);
+  const nx = x / len, ny = y / len, nz = z / len;
+  const deform = noise3d(nx * 3, ny * 3, nz * 3) * 0.2;
+  const r = len + deform;
+  origPositions[i3] = nx * r;
+  origPositions[i3 + 1] = ny * r;
+  origPositions[i3 + 2] = nz * r;
+}
+blobGeo.attributes.position.array.set(origPositions);
+blobGeo.attributes.position.needsUpdate = true;
+blobGeo.computeVertexNormals();
+
+// precalc which vertices should stick out more when rh goes up
+const spikeNoise = new Float32Array(vertexCount);
+for (let i = 0; i < vertexCount; i++) {
+  const x = origPositions[i * 3], y = origPositions[i * 3 + 1], z = origPositions[i * 3 + 2];
+  spikeNoise[i] = Math.max(0, noise3d(x * 2.5, y * 2.5, z * 2.5));
+}
+
+// slightly bigger transparent shell behind the blob for that glow look
+const glowGeo = new THREE.IcosahedronGeometry(1.6, 3);
+const glowMat = new THREE.MeshBasicMaterial({
+  color: 0x4488cc,
+  transparent: true,
+  opacity: 0.06,
+  side: THREE.BackSide,
+});
+const glowMesh = new THREE.Mesh(glowGeo, glowMat);
+scene.add(glowMesh);
+
+// particles floating around, supposed to look like molecules kinda
+const PARTICLE_COUNT = 4000;
+const pGeo = new THREE.BufferGeometry();
+const pPositions = new Float32Array(PARTICLE_COUNT * 3);
+const pVelocities = new Float32Array(PARTICLE_COUNT * 3);
+
+for (let i = 0; i < PARTICLE_COUNT; i++) {
+  const theta = Math.random() * Math.PI * 2;
+  const phi = Math.acos(2 * Math.random() - 1);
+  const r = 2.0 + Math.random() * 2.5;
+  pPositions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+  pPositions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+  pPositions[i * 3 + 2] = r * Math.cos(phi);
+  pVelocities[i * 3] = (Math.random() - 0.5) * 0.02;
+  pVelocities[i * 3 + 1] = (Math.random() - 0.5) * 0.02;
+  pVelocities[i * 3 + 2] = (Math.random() - 0.5) * 0.02;
+}
+pGeo.setAttribute('position', new THREE.BufferAttribute(pPositions, 3));
+
+const pMat = new THREE.PointsMaterial({
+  color: 0x88bbff,
+  size: 0.025,
+  transparent: true,
+  opacity: 0.5,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false,
+});
+const particles = new THREE.Points(pGeo, pMat);
+scene.add(particles);
+
+// lights
+scene.add(new THREE.AmbientLight(0x1a1a2e, 0.4));
+
+const keyLight = new THREE.DirectionalLight(0xccbbff, 1.8);
+keyLight.position.set(4, 5, 4);
+scene.add(keyLight);
+
+const fillLight = new THREE.DirectionalLight(0x4466aa, 0.6);
+fillLight.position.set(-3, -1, 2);
+scene.add(fillLight);
+
+const rimLight = new THREE.PointLight(0x8866cc, 1.0, 15);
+rimLight.position.set(0, -3, -6);
+scene.add(rimLight);
+
+const dangerLight = new THREE.PointLight(0xff6633, 0, 20);
+dangerLight.position.set(-4, 2, -3);
+scene.add(dangerLight);
+
+function lerp(a, b, t) { return a + (b - a) * t; }
+
+// purple when conditions are good, blue when too cold, orange when too hot
+// spent ages tweaking these lerps lol
+function deviationColor(temp, rh) {
+  const baseTemp = parseFloat(document.getElementById('base-temp').value) || 22;
+  const baseRH = parseFloat(document.getElementById('base-rh').value) || 22;
+
+  const tempDev = (temp - baseTemp) / 8;
+  const rhDev = (rh - baseRH) / 40;
+  const dev = Math.max(-1, Math.min(1, (tempDev + rhDev) / 2));
+  if (dev < 0) {
+    const t = -dev;
+    return new THREE.Color(
+      lerp(0.6, 0.1, t),
+      lerp(0.1, 0.2, t),
+      lerp(1.0, 1.0, t)
+    );
+  } else {
+    const t = dev;
+    return new THREE.Color(
+      lerp(0.6, 1.0, t),
+      lerp(0.1, 0.5, t),
+      lerp(1.0, 0.0, t)
+    );
+  }
+}
+
+
+function updateScene(data, time, dt) {
+  // smoothing so it doesnt just snap between values
+  const lr = 0.08;
+  sm.temp = lerp(sm.temp, data.temp, lr);
+  sm.rh = lerp(sm.rh, data.rh, lr);
+  sm.margin = lerp(sm.margin, data.margin, lr);
+  sm.risk = lerp(sm.risk, data.risk, lr);
+  sm.tv = lerp(sm.tv, data.tv, lr);
+  sm.rv = lerp(sm.rv, data.rv, lr);
+  sm.exc = data.exc;
+
+  const baseRH = parseFloat(document.getElementById('base-rh').value) || 22;
+  const rhDiff = sm.rh - baseRH;
+
+  const aboveFactor = Math.pow(Math.max(0, rhDiff / 50), 1.3);
+  const bumpAmount = aboveFactor * 2.5;
+  const belowFactor = Math.max(0, -rhDiff / 30);
+  const shrink = 1 - belowFactor * 0.4;
+
+  const bumpTime = time * 0.4;
+
+  const positions = blobGeo.attributes.position.array;
+  for (let i = 0; i < vertexCount; i++) {
+    const i3 = i * 3;
+    const ox = origPositions[i3], oy = origPositions[i3 + 1], oz = origPositions[i3 + 2];
+    const len = Math.sqrt(ox * ox + oy * oy + oz * oz);
+    const nx = ox / len, ny = oy / len, nz = oz / len;
+
+    const wave = 0.5 + 0.5 * Math.sin(bumpTime + spikeNoise[i] * 5.0);
+    const bump = spikeNoise[i] * wave * bumpAmount;
+    const breath = Math.sin(time * 0.6) * 0.012; // subtle breathing thing
+
+    const r = (len + bump + breath) * shrink;
+    positions[i3] = nx * r;
+    positions[i3 + 1] = ny * r;
+    positions[i3 + 2] = nz * r;
+  }
+  blobGeo.attributes.position.needsUpdate = true;
+  blobGeo.computeVertexNormals();
+
+  const col = deviationColor(sm.temp, sm.rh);
+  blobMat.color.lerp(col, 0.08);
+  blobMat.emissive.lerp(new THREE.Color(col.r * 0.2, col.g * 0.15, col.b * 0.15), 0.05);
+  glowMat.color.copy(blobMat.color);
+  glowMat.opacity = lerp(glowMat.opacity, 0.04 + sm.risk * 0.5, 0.05);
+
+  const rotSpeed = lerp(0.001, 0.02, Math.min(1, sm.tv + sm.rv * 0.02));
+  blob.rotation.y += rotSpeed;
+  blob.rotation.x += rotSpeed * 0.3;
+  glowMesh.rotation.copy(blob.rotation);
+
+  // further from target temp = faster particles, like kinetic energy
+  const baseTemp = parseFloat(document.getElementById('base-temp').value) || 22;
+  const tempDev = Math.abs(sm.temp - baseTemp);
+  const tempFactor = Math.min(1, tempDev / 6);
+  const brownianSpeed = lerp(0.005, 0.09, tempFactor);
+
+  const pp = pGeo.attributes.position.array;
+  for (let i = 0; i < PARTICLE_COUNT; i++) {
+    const i3 = i * 3;
+
+    pVelocities[i3] += (Math.random() - 0.5) * brownianSpeed * 0.5;
+    pVelocities[i3 + 1] += (Math.random() - 0.5) * brownianSpeed * 0.5;
+    pVelocities[i3 + 2] += (Math.random() - 0.5) * brownianSpeed * 0.5;
+
+    const damping = 0.92;
+    pVelocities[i3] *= damping;
+    pVelocities[i3 + 1] *= damping;
+    pVelocities[i3 + 2] *= damping;
+
+    pp[i3] += pVelocities[i3];
+    pp[i3 + 1] += pVelocities[i3 + 1];
+    pp[i3 + 2] += pVelocities[i3 + 2];
+
+    // nudge them back if they wander too far out or too close in
+    const px = pp[i3], py = pp[i3 + 1], pz = pp[i3 + 2];
+    const dist = Math.sqrt(px * px + py * py + pz * pz);
+
+    if (dist > 5.0 || dist < 1.7) {
+      const pull = dist > 5.0 ? -0.02 : 0.02;
+      pp[i3] += (px / dist) * pull;
+      pp[i3 + 1] += (py / dist) * pull;
+      pp[i3 + 2] += (pz / dist) * pull;
+    }
+
+  }
+  pGeo.attributes.position.needsUpdate = true;
+
+  pMat.opacity = lerp(0.3, 0.8, tempFactor);
+  pMat.size = lerp(0.02, 0.04, tempFactor);
+  pMat.color.lerp(col, 0.03);
+
+  const bgCol = deviationColor(sm.temp, sm.rh);
+  scene.background = new THREE.Color(
+    0.02 + bgCol.r * 0.03,
+    0.02 + bgCol.g * 0.03,
+    0.03 + bgCol.b * 0.03
+  );
+
+  dangerLight.intensity = lerp(dangerLight.intensity, sm.risk * 8, 0.05);
+  keyLight.intensity = 1.2;
+}
+
+function updateUI(data, index, total) {
+  document.getElementById('v-temp').textContent = data.temp.toFixed(1);
+  document.getElementById('v-rh').textContent = data.rh.toFixed(0);
+  document.getElementById('v-dew').textContent = data.dew.toFixed(1);
+  document.getElementById('v-margin').textContent = data.margin.toFixed(1);
+  document.getElementById('v-risk').textContent = (data.risk * 100).toFixed(1) + '%';
+
+  document.getElementById('timestamp-display').textContent = data.ts;
+
+  const riskPct = Math.min(100, (data.risk / 0.35) * 100);
+  const riskFill = document.getElementById('risk-bar-fill');
+  riskFill.style.width = riskPct + '%';
+  const rc = deviationColor(data.temp, data.rh);
+  riskFill.style.background = `rgb(${Math.round(rc.r*255)},${Math.round(rc.g*255)},${Math.round(rc.b*255)})`;
+
+  const pct = ((index + 1) / total) * 100;
+  document.getElementById('timeline-fill').style.width = pct + '%';
+  document.getElementById('timeline-handle').style.left = pct + '%';
+  document.getElementById('timeline-label').textContent = `${index + 1} / ${total}`;
+
+  const dataset = DATASETS[currentRun];
+  const histStart = Math.max(0, index - 5);
+  let html = '';
+  for (let i = histStart; i <= index; i++) {
+    const d = dataset[i];
+    const isLatest = i === index;
+    html += `<div class="hist-row${isLatest ? ' latest' : ''}">`
+      + `<span>${d.ts}</span>`
+      + `<span>${d.temp.toFixed(1)}°C</span>`
+      + `<span>${d.rh.toFixed(0)}%</span>`
+      + `</div>`;
+  }
+  document.getElementById('hist-rows').innerHTML = html;
+}
+
+function step() {
+  const dataset = DATASETS[currentRun];
+  if (currentIndex >= dataset.length) currentIndex = 0;
+  updateUI(dataset[currentIndex], currentIndex, dataset.length);
+  currentIndex++;
+}
+
+function startPlayback() {
+  if (playInterval) clearInterval(playInterval);
+  playInterval = setInterval(step, playSpeed);
+}
+
+function switchRun(run) {
+  currentRun = run;
+  currentIndex = 0;
+  sm = { temp: 22, rh: 22, margin: 22, risk: 0.044, tv: 0, rv: 0, exc: 0 };
+  document.getElementById('btn-run1').className = run === 0 ? 'active' : '';
+  document.getElementById('btn-run2').className = run === 1 ? 'active' : '';
+  startPlayback();
+}
+
+function setSpeed(ms) {
+  playSpeed = ms;
+  if (!isPaused) startPlayback();
+}
+
+let isPaused = false;
+
+function togglePause() {
+  isPaused = !isPaused;
+  const btn = document.getElementById('btn-pause');
+  if (isPaused) {
+    if (playInterval) clearInterval(playInterval);
+    playInterval = null;
+    btn.textContent = '\u25B6';
+  } else {
+    startPlayback();
+    btn.textContent = 'II';
+  }
+}
+
+let isScrubbing = false;
+
+function scrubTo(e) {
+  const container = document.getElementById('timeline-container');
+  const rect = container.getBoundingClientRect();
+  const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+  const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+  const dataset = DATASETS[currentRun];
+  currentIndex = Math.floor(pct * (dataset.length - 1));
+  updateUI(dataset[currentIndex], currentIndex, dataset.length);
+}
+
+function scrubStart(e) {
+  isScrubbing = true;
+  if (playInterval) clearInterval(playInterval);
+  scrubTo(e);
+  document.addEventListener('mousemove', scrubMove);
+  document.addEventListener('mouseup', scrubEnd);
+  document.addEventListener('touchmove', scrubMove);
+  document.addEventListener('touchend', scrubEnd);
+}
+
+function scrubMove(e) {
+  if (isScrubbing) scrubTo(e);
+}
+
+function scrubEnd() {
+  isScrubbing = false;
+  document.removeEventListener('mousemove', scrubMove);
+  document.removeEventListener('mouseup', scrubEnd);
+  document.removeEventListener('touchmove', scrubMove);
+  document.removeEventListener('touchend', scrubEnd);
+  startPlayback();
+}
+
+const clock = new THREE.Clock();
+let lastTime = 0;
+
+function animate() {
+  requestAnimationFrame(animate);
+  const time = clock.getElapsedTime();
+  const dt = time - lastTime;
+  lastTime = time;
+
+  const dataset = DATASETS[currentRun];
+  const idx = Math.max(0, currentIndex - 1);
+  const data = dataset[idx] || dataset[0];
+
+  updateScene(data, time, dt);
+
+  camera.position.set(0, 0, 7);
+  camera.lookAt(0, 0, 0);
+
+  renderer.render(scene, camera);
+}
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+startPlayback();
+animate();
+
+// api so a parent dashboard can feed data in without touching the internals
+window.DewPointLens = {
+  setTargets(temp, rh) {
+    document.getElementById('base-temp').value = temp;
+    document.getElementById('base-rh').value = rh;
+  },
+
+  loadData(data, slot = 0) {
+    DATASETS[slot] = data;
+    if (currentRun === slot) {
+      currentIndex = 0;
+      startPlayback();
+    }
+  },
+
+  pushReading(reading) {
+    reading.ts = reading.ts || new Date().toLocaleTimeString('en-GB', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    DATASETS[currentRun].push(reading);
+  },
+
+  setSpeed(ms) {
+    playSpeed = ms;
+    document.getElementById('speed-select').value = ms;
+    startPlayback();
+  },
+
+  seekTo(pct) {
+    const dataset = DATASETS[currentRun];
+    currentIndex = Math.floor(Math.max(0, Math.min(1, pct)) * (dataset.length - 1));
+    updateUI(dataset[currentIndex], currentIndex, dataset.length);
+  }
+};
+</script>
+</body>
+</html>
